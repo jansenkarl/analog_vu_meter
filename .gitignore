@@ -1,0 +1,10 @@
+*
+
+!.gitignore
+!LICENSE
+!README.md
+!CMakeLists.txt
+
+!src/
+!src/**
+
