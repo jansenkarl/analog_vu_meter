@@ -4,36 +4,8 @@
 #include <cmath>
 
 #include <QPainter>
-#include <QPainterPath>
 
-static constexpr float kMinVu = -20.0f;
-static constexpr float kMaxVu = 3.0f;
 static constexpr float kPi = 3.14159265358979323846f;
-
-static float clampf(float v, float lo, float hi)
-{
-    return std::max(lo, std::min(hi, v));
-}
-
-static float normalizedForVuDb(float vuDb)
-{
-    vuDb = clampf(vuDb, kMinVu, kMaxVu);
-
-    if (vuDb <= -10.0f) {
-        const float t = (vuDb - kMinVu) / (-10.0f - kMinVu);
-        return 0.20f * std::pow(t, 2.2f);  // Compress -20 to -10 to 20% of scale
-    }
-
-    if (vuDb <= 0.0f) {
-        const float t = (vuDb - (-10.0f)) / (0.0f - (-10.0f));
-        return 0.20f + (0.78f - 0.20f) * std::pow(t, 1.4f);  // -10 to 0 gets 58% of scale
-    }
-
-    {
-        const float t = (vuDb - 0.0f) / (kMaxVu - 0.0f);
-        return 0.78f + (1.0f - 0.78f) * t;  // 0 to +3 gets 22% of scale
-    }
-}
 
 static QPointF polarFromBottomPivot(const QPointF& pivot, float radius, float thetaDeg)
 {
@@ -79,12 +51,11 @@ void StereoVUMeterWidget::paintEvent(QPaintEvent*)
     const QRectF leftRect(inner.left(), inner.top(), meterW, inner.height());
     const QRectF rightRect(leftRect.right() + gap, inner.top(), meterW, inner.height());
 
-    drawMeter(p, leftRect, left_, "L");
-    drawMeter(p, rightRect, right_, "R");
+    drawMeter(p, leftRect, left_);
+    drawMeter(p, rightRect, right_);
 }
 
-void StereoVUMeterWidget::drawMeter(QPainter &p, const QRectF &rect, float vuDb,
-                                    const QString &cornerLabel) {
+void StereoVUMeterWidget::drawMeter(QPainter &p, const QRectF &rect, float vuDb) {
   p.save();
 
   // --- Frame ---
@@ -123,13 +94,6 @@ void StereoVUMeterWidget::drawMeter(QPainter &p, const QRectF &rect, float vuDb,
   const QPointF pivot(face.center().x(), face.bottom() - face.height() * 0.06);
   const qreal radius = std::min(face.width(), face.height()) * 0.52;
 
-  const float norm = normalizedForVuDb(vuDb);
-//   const float theta = -50.0f + 100.0f * norm;
-
-  //   auto angleForVu = [](float vu) {
-  //     const float n = normalizedForVuDb(vu);
-  //     return -50.0f + 100.0f * n;
-  //   };
   auto angleForVu = [](float vu) {
     static const QVector<QPair<float, float>> table = {
       {-20, -46},
@@ -251,19 +215,6 @@ void StereoVUMeterWidget::drawMeter(QPainter &p, const QRectF &rect, float vuDb,
                       face.width(), face.height() * 0.12);
 
   p.drawText(vuRect, Qt::AlignHCenter | Qt::AlignVCenter, "VU");
-
-//   // --- Corner label (L/R) ---
-//   QFont corner = p.font();
-//   corner.setBold(true);
-//   corner.setStretch(90);
-//   corner.setPointSizeF(rect.height() * 0.06);
-//   p.setFont(corner);
-
-//   const QRectF labelRect(face.left(), face.bottom() - face.height() * 0.32,
-//                          face.width(), face.height() * 0.20);
-
-//   p.setPen(QColor(0, 0, 0, 190));
-//   p.drawText(labelRect, Qt::AlignHCenter | Qt::AlignVCenter, cornerLabel);
 
   // --- Needle shadow ---
   const QPointF needleTip = polarFromBottomPivot(pivot, radius * 0.98, theta);

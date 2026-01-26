@@ -4,6 +4,8 @@
 #include <cmath>
 #include <thread>
 
+#include <QByteArray>
+#include <QPair>
 #include <pulse/pulseaudio.h>
 
 static constexpr float kMinVu = -22.0f;
@@ -58,8 +60,7 @@ bool AudioCapture::start(QString *errorOut) {
   }
 
   // Start the PulseAudio mainloop in a separate thread, but with simple synchronization
-  thread_ = std::thread([this]() { 
-    dt_ = static_cast<float>(options_.framesPerBuffer) / static_cast<float>(options_.sampleRate);
+  thread_ = std::thread([this]() {
     int ret = 0;
     pa_mainloop_run(mainloop_, &ret);
   });
@@ -81,6 +82,21 @@ void AudioCapture::stop() {
 
   if (thread_.joinable()) {
     thread_.join();
+  }
+
+  if (stream_) {
+    pa_stream_disconnect(stream_);
+    pa_stream_unref(stream_);
+    stream_ = nullptr;
+  }
+  if (context_) {
+    pa_context_disconnect(context_);
+    pa_context_unref(context_);
+    context_ = nullptr;
+  }
+  if (mainloop_) {
+    pa_mainloop_free(mainloop_);
+    mainloop_ = nullptr;
   }
 }
 
@@ -269,12 +285,6 @@ void AudioCapture::stream_read_callback(pa_stream *s, size_t length,
   double sumL = 0.0;
   double sumR = 0.0;
 
-  // for (unsigned int i = 0; i < frames; ++i) {
-  //   const float l = data[i * channels + 0];
-  //   const float r = (channels > 1) ? data[i * channels + 1] : l;
-  //   sumL += static_cast<double>(l) * static_cast<double>(l);
-  //   sumR += static_cast<double>(r) * static_cast<double>(r);
-  // }
   static float prevL = 0.0f;
   static float prevR = 0.0f;
   for (unsigned int i = 0; i < frames; ++i) {
@@ -333,9 +343,11 @@ void AudioCapture::stream_read_callback(pa_stream *s, size_t length,
 
   // --- Reference level for hi-fi VU behavior ---
   float effectiveRefDbfs;
-  if (self->options_.deviceType == 1) {
+  if (self->options_.referenceDbfsOverride) {
+    effectiveRefDbfs = static_cast<float>(self->options_.referenceDbfs);
+  } else if (self->options_.deviceType == 1) {
     // Microphone mode
-    effectiveRefDbfs = -0.0f; // good starting point
+    effectiveRefDbfs = -0.0f;
   } else {
     // System output mode
     effectiveRefDbfs = -14.0f;
@@ -370,21 +382,9 @@ void AudioCapture::stream_state_callback(pa_stream *s, void *userdata) {
   
   switch (pa_stream_get_state(s)) {
   case PA_STREAM_READY: {
-    // Don't lock the mutex here to avoid deadlock
-    self->initOk_ = true;
-    self->initDone_ = true;
-    self->initError_.clear();
-    self->initCv_.notify_one();
     break;
   }
   case PA_STREAM_FAILED: {
-    std::lock_guard<std::mutex> lock(self->initMutex_);
-    if (!self->initDone_) {
-      self->initOk_ = false;
-      self->initDone_ = true;
-      self->initError_ = QStringLiteral("PulseAudio stream failed");
-      self->initCv_.notify_one();
-    }
     emit self->errorOccurred(QStringLiteral("PulseAudio stream failed"));
     break;
   }
@@ -397,13 +397,9 @@ void AudioCapture::sink_info_callback(pa_context *c, const pa_sink_info *si,
                                       int is_last, void *userdata) {
   (void)c;
   auto *self = static_cast<AudioCapture *>(userdata);
-
+ 
   if (is_last < 0 || !si) {
-    std::lock_guard<std::mutex> lock(self->initMutex_);
-    self->initOk_ = false;
-    self->initDone_ = true;
-    self->initError_ = QStringLiteral("Failed to get sink info");
-    self->initCv_.notify_one();
+    emit self->errorOccurred(QStringLiteral("Failed to get sink info"));
     return;
   }
 
@@ -427,7 +423,6 @@ void AudioCapture::sink_info_callback(pa_context *c, const pa_sink_info *si,
   pa_stream_set_read_callback(self->stream_,
                               &AudioCapture::stream_read_callback, self);
 
-  // Use the monitor source of this sink → system output
   pa_buffer_attr attr;
   attr.maxlength = (uint32_t)-1;
   attr.tlength = (uint32_t)-1;
@@ -443,13 +438,9 @@ void AudioCapture::source_info_callback(pa_context *c, const pa_source_info *si,
                                         int is_last, void *userdata) {
   (void)c;
   auto *self = static_cast<AudioCapture *>(userdata);
-
+ 
   if (is_last < 0 || !si) {
-    std::lock_guard<std::mutex> lock(self->initMutex_);
-    self->initOk_ = false;
-    self->initDone_ = true;
-    self->initError_ = QStringLiteral("Failed to get source info");
-    self->initCv_.notify_one();
+    emit self->errorOccurred(QStringLiteral("Failed to get source info"));
     return;
   }
 
@@ -486,7 +477,7 @@ void AudioCapture::source_info_callback(pa_context *c, const pa_source_info *si,
 
 void AudioCapture::context_state_callback(pa_context *c, void *userdata) {
   auto *self = static_cast<AudioCapture *>(userdata);
-
+ 
   switch (pa_context_get_state(c)) {
   case PA_CONTEXT_READY: {
     const char *name = nullptr;
@@ -521,91 +512,10 @@ void AudioCapture::context_state_callback(pa_context *c, void *userdata) {
     break;
   }
   case PA_CONTEXT_FAILED: {
-    std::lock_guard<std::mutex> lock(self->initMutex_);
-    self->initOk_ = false;
-    self->initDone_ = true;
-    self->initError_ = QStringLiteral("PulseAudio context failed");
-    self->initCv_.notify_one();
     emit self->errorOccurred(QStringLiteral("PulseAudio context failed"));
     break;
   }
   default:
     break;
-  }
-}
-
-// -------- Capture thread --------
-
-void AudioCapture::threadMain() {
-  mainloop_ = pa_mainloop_new();
-  if (!mainloop_) {
-    {
-      std::lock_guard<std::mutex> lock(initMutex_);
-      initOk_ = false;
-      initDone_ = true;
-      initError_ = QStringLiteral("Failed to create PulseAudio mainloop");
-    }
-    initCv_.notify_one();
-    emit errorOccurred(initError_);
-    return;
-  }
-
-  context_ = pa_context_new(pa_mainloop_get_api(mainloop_), "Analog VU Meter");
-  if (!context_) {
-    {
-      std::lock_guard<std::mutex> lock(initMutex_);
-      initOk_ = false;
-      initDone_ = true;
-      initError_ = QStringLiteral("Failed to create PulseAudio context");
-    }
-    initCv_.notify_one();
-    emit errorOccurred(initError_);
-    pa_mainloop_free(mainloop_);
-    mainloop_ = nullptr;
-    return;
-  }
-
-  pa_context_set_state_callback(context_, &AudioCapture::context_state_callback,
-                                this);
-  
-  // Try to connect with AUTOSPAWN to ensure PulseAudio starts if not running
-  int connect_result = pa_context_connect(context_, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
-  if (connect_result < 0) {
-    {
-      std::lock_guard<std::mutex> lock(initMutex_);
-      initOk_ = false;
-      initDone_ = true;
-      initError_ = QStringLiteral("Failed to connect to PulseAudio: %1").arg(pa_strerror(connect_result));
-    }
-    initCv_.notify_one();
-    emit errorOccurred(initError_);
-    pa_context_unref(context_);
-    context_ = nullptr;
-    pa_mainloop_free(mainloop_);
-    mainloop_ = nullptr;
-    return;
-  }
-
-  dt_ = static_cast<float>(options_.framesPerBuffer) /
-        static_cast<float>(options_.sampleRate);
-
-  int ret = 0;
-  if (pa_mainloop_run(mainloop_, &ret) < 0) {
-    emit errorOccurred(QStringLiteral("PulseAudio mainloop failed"));
-  }
-
-  if (stream_) {
-    pa_stream_disconnect(stream_);
-    pa_stream_unref(stream_);
-    stream_ = nullptr;
-  }
-  if (context_) {
-    pa_context_disconnect(context_);
-    pa_context_unref(context_);
-    context_ = nullptr;
-  }
-  if (mainloop_) {
-    pa_mainloop_free(mainloop_);
-    mainloop_ = nullptr;
   }
 }

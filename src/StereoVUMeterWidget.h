@@ -23,5 +23,5 @@ private:
     float left_ = -20.0f;
     float right_ = -20.0f;
 
-    void drawMeter(QPainter& p, const QRectF& rect, float vuDb, const QString& cornerLabel);
+    void drawMeter(QPainter& p, const QRectF& rect, float vuDb);
 };

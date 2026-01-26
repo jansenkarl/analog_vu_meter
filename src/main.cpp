@@ -60,11 +60,12 @@ int main(int argc, char** argv)
         }
     }
 
-    {
+    if (parser.isSet(refOpt)) {
         bool ok = false;
         const double ref = parser.value(refOpt).toDouble(&ok);
         if (ok) {
             options.referenceDbfs = ref;
+            options.referenceDbfsOverride = true;
         }
     }
 

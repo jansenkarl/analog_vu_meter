@@ -4,8 +4,6 @@
 #include <QString>
 
 #include <atomic>
-#include <condition_variable>
-#include <mutex>
 #include <thread>
 
 #include "VUBallistics.h"
@@ -24,6 +22,7 @@ public:
   struct Options final {
     int deviceIndex = -1; // unused in libpulse path, retained for compatibility
     double referenceDbfs = -18.0;
+    bool referenceDbfsOverride = false;
     int sampleRate = 48000;
     unsigned long framesPerBuffer = 512;
 
@@ -49,8 +48,6 @@ signals:
   void errorOccurred(const QString &message);
 
 private:
-  void threadMain();
-
   // PulseAudio callbacks
   static void context_state_callback(pa_context *c, void *userdata);
   static void sink_info_callback(pa_context *c, const pa_sink_info *si,
@@ -69,12 +66,6 @@ private:
   std::atomic<bool> running_{false};
   std::thread thread_;
 
-  std::mutex initMutex_;
-  std::condition_variable initCv_;
-  bool initDone_ = false;
-  bool initOk_ = false;
-  QString initError_;
-
   // Replaces PortAudio stream pointer
   pa_mainloop *mainloop_ = nullptr;
   pa_context *context_ = nullptr;
@@ -82,6 +73,4 @@ private:
 
   VUBallistics ballisticsL_;
   VUBallistics ballisticsR_;
-
-  float dt_ = 0.0f; // seconds per buffer, used for ballistics timing
 };

@@ -1,6 +1,7 @@
 #include "VUBallistics.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
 
 VUBallistics::VUBallistics(float initialDb)
