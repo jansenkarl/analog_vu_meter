@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include "StereoVUMeterWidget.h"
+#include "version.h"
 
 MainWindow::MainWindow(const AudioCapture::Options& options, QWidget* parent) : QMainWindow(parent), audio_(options) {
     setWindowTitle("Analog VU Meter");
@@ -76,10 +77,22 @@ void MainWindow::createMenuBar() {
     QAction* refreshAction = audioMenu_->addAction(tr("&Refresh Devices"));
     connect(refreshAction, &QAction::triggered, this, &MainWindow::refreshDeviceMenu);
 
-#ifdef Q_OS_MAC
-    // On macOS, add a Quit action to follow platform conventions
-    // (though Cmd+Q already works by default)
-#endif
+    // About action - Qt automatically moves this to the app menu on macOS
+    QAction* aboutAction = new QAction(tr("About Analog VU Meter"), this);
+    aboutAction->setMenuRole(QAction::AboutRole);
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
+    audioMenu_->addAction(aboutAction);
+}
+
+void MainWindow::showAbout() {
+    QMessageBox::about(
+        this,
+        tr("About Analog VU Meter"),
+        tr("<h3>Analog VU Meter</h3>"
+           "<p>Version %1</p>"
+           "<p>A real-time audio level meter with classic analog VU meter styling.</p>"
+           "<p>© 2024-2026</p>")
+            .arg(APP_VERSION));
 }
 
 void MainWindow::populateDeviceMenu() {

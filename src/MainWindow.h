@@ -24,6 +24,7 @@ class MainWindow final : public QMainWindow {
     void onDeviceSelected(QAction* action);
     void onReferenceSelected(QAction* action);
     void refreshDeviceMenu();
+    void showAbout();
 
   private:
     void createMenuBar();

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AnalogVUMeterQt VERSION 0.1.0 LANGUAGES CXX)
+project(AnalogVUMeterQt VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +10,13 @@ set(CMAKE_AUTOUIC OFF)
 set(CMAKE_AUTORCC OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
+
+# Generate version config header
+configure_file(
+    ${CMAKE_SOURCE_DIR}/src/version.h.in
+    ${CMAKE_BINARY_DIR}/version.h
+    @ONLY
+)
 
 # Platform-specific sources and dependencies
 if(APPLE)
@@ -56,6 +63,7 @@ add_executable(analog_vu_meter
 
 # Include directories
 target_include_directories(analog_vu_meter PRIVATE
+    ${CMAKE_BINARY_DIR}
     ${PLATFORM_INCLUDE_DIRS}
 )
 
