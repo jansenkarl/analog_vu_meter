@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC OFF)
-set(CMAKE_AUTORCC OFF)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
@@ -58,6 +58,7 @@ add_executable(analog_vu_meter
     src/AudioCapture.h
     src/VUBallistics.cpp
     src/VUBallistics.h
+    resources.qrc
     ${PLATFORM_SOURCES}
 )
 
@@ -108,4 +109,29 @@ if(APPLE)
     
     # Enable ARC (Automatic Reference Counting) for Objective-C++ if needed
     # target_compile_options(analog_vu_meter PRIVATE -fobjc-arc)
+    
+    # Find macdeployqt for bundling Qt frameworks
+    get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
+    get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
+    find_program(MACDEPLOYQT_EXECUTABLE macdeployqt HINTS "${_qt_bin_dir}")
+    
+    if(MACDEPLOYQT_EXECUTABLE)
+        # Add post-build deployment step to bundle Qt frameworks
+        add_custom_command(TARGET analog_vu_meter POST_BUILD
+            COMMAND "${MACDEPLOYQT_EXECUTABLE}"
+                "$<TARGET_BUNDLE_DIR:analog_vu_meter>"
+                -always-overwrite
+            COMMENT "Running macdeployqt to bundle Qt frameworks..."
+        )
+        
+        # Re-sign the app bundle after macdeployqt modifies it
+        # This fixes "Code Signature Invalid" crashes on macOS
+        add_custom_command(TARGET analog_vu_meter POST_BUILD
+            COMMAND codesign --force --deep --sign - "$<TARGET_BUNDLE_DIR:analog_vu_meter>"
+            COMMENT "Re-signing app bundle after deployment..."
+        )
+        message(STATUS "macdeployqt found: ${MACDEPLOYQT_EXECUTABLE}")
+    else()
+        message(WARNING "macdeployqt not found - Qt frameworks will not be bundled automatically")
+    endif()
 endif()

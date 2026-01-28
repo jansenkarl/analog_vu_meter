@@ -23,6 +23,7 @@ class MainWindow final : public QMainWindow {
   private slots:
     void onDeviceSelected(QAction* action);
     void onReferenceSelected(QAction* action);
+    void onStyleSelected(QAction* action);
     void refreshDeviceMenu();
     void showAbout();
 
@@ -30,6 +31,7 @@ class MainWindow final : public QMainWindow {
     void createMenuBar();
     void populateDeviceMenu();
     void populateReferenceMenu();
+    void populateStyleMenu();
 
     AudioCapture audio_;
     StereoVUMeterWidget* meter_ = nullptr;
@@ -38,6 +40,8 @@ class MainWindow final : public QMainWindow {
     QMenu* audioMenu_ = nullptr;
     QMenu* deviceMenu_ = nullptr;
     QMenu* referenceMenu_ = nullptr;
+    QMenu* styleMenu_ = nullptr;
     QActionGroup* deviceActionGroup_ = nullptr;
     QActionGroup* referenceActionGroup_ = nullptr;
+    QActionGroup* styleActionGroup_ = nullptr;
 };
