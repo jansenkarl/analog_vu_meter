@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QFontDatabase>
 #include <QPainter>
+#include <QPainterPath>
 #include <qnamespace.h>
 
 static constexpr float kPi = 3.14159265358979323846f;
@@ -18,6 +20,86 @@ static QPointF polarFromBottomPivot(const QPointF& pivot, float radius, float th
 StereoVUMeterWidget::StereoVUMeterWidget(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
+    
+    // Load the SONY logo font from resources
+    int fontId = QFontDatabase::addApplicationFont(":/fonts/clarendon_regular.otf");
+    if (fontId != -1) {
+        QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        if (!families.isEmpty()) {
+            sonyFontFamily_ = families.first();
+        }
+    }
+}
+
+void StereoVUMeterWidget::setStyle(VUMeterStyle style) {
+    if (style_ != style) {
+        style_ = style;
+        update();
+    }
+}
+
+StereoVUMeterWidget::StyleParams StereoVUMeterWidget::getStyleParams() const {
+    StyleParams params;
+    
+    switch (style_) {
+        case VUMeterStyle::Original:
+        default:
+            params.labelSizeFactor = 0.050;
+            params.vuTextSizeFactor = 0.070;
+            params.vuTextRadius = 1.29;
+            params.singleVuText = false;
+            params.faceColorTop = QColor(250, 246, 226);
+            params.faceColorBottom = QColor(236, 230, 200);
+            params.labelColor = QColor(0, 0, 0, 220);
+            params.redZoneColor = QColor(170, 20, 20);
+            break;
+            
+        case VUMeterStyle::Sony:
+            params.labelSizeFactor = 0.065;      // ~67% larger labels
+            params.vuTextSizeFactor = 0.095;     // ~90% larger VU text
+            params.vuTextRadius = 0.85;          // Positioned in bottom third of face
+            params.singleVuText = true;          // Single centered VU
+            params.faceColorTop = QColor(235, 230, 200);
+            params.faceColorBottom = QColor(220, 215, 185);
+            params.labelColor = QColor(0, 0, 0, 230);
+            params.redZoneColor = QColor(140, 20, 20);
+            break;
+            
+        case VUMeterStyle::Vintage:
+            params.labelSizeFactor = 0.070;
+            params.vuTextSizeFactor = 0.080;
+            params.vuTextRadius = 1.29;
+            params.singleVuText = false;
+            params.faceColorTop = QColor(255, 248, 220);  // Warmer cream
+            params.faceColorBottom = QColor(240, 230, 195);
+            params.labelColor = QColor(60, 40, 20, 230);  // Brown-ish
+            params.redZoneColor = QColor(180, 50, 30);    // Orange-red
+            break;
+            
+        case VUMeterStyle::Modern:
+            params.labelSizeFactor = 0.060;
+            params.vuTextSizeFactor = 0.090;
+            params.vuTextRadius = 0.85;
+            params.singleVuText = true;
+            params.faceColorTop = QColor(245, 245, 248);  // Cool white
+            params.faceColorBottom = QColor(235, 235, 240);
+            params.labelColor = QColor(40, 40, 45, 230);  // Dark gray
+            params.redZoneColor = QColor(220, 50, 50);    // Bright red
+            break;
+            
+        case VUMeterStyle::Black:
+            params.labelSizeFactor = 0.060;
+            params.vuTextSizeFactor = 0.090;
+            params.vuTextRadius = 0.85;
+            params.singleVuText = true;
+            params.faceColorTop = QColor(20, 20, 22);     // Black (inverted from white)
+            params.faceColorBottom = QColor(30, 30, 35);  // Slightly lighter black
+            params.labelColor = QColor(235, 235, 240, 230);  // White (inverted from dark gray)
+            params.redZoneColor = QColor(220, 50, 50);    // Bright red (unchanged)
+            break;
+    }
+    
+    return params;
 }
 
 void StereoVUMeterWidget::setLevels(float leftVuDb, float rightVuDb) {
@@ -67,6 +149,9 @@ void StereoVUMeterWidget::paintEvent(QPaintEvent*) {
 
 void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb) {
     p.save();
+    
+    // Get style-dependent parameters
+    const StyleParams sp = getStyleParams();
 
     // --- Frame ---
     const qreal frameRadius = std::min(rect.width(), rect.height()) * 0.06;
@@ -83,21 +168,15 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
     // --- Face ---
     const qreal inset = std::max<qreal>(10.0, rect.width() * 0.04);
     const QRectF face = rect.adjusted(inset, inset, -inset, -inset);
+    const qreal faceRadius = frameRadius * 0.75;
 
     QLinearGradient faceGrad(face.topLeft(), face.bottomLeft());
-    faceGrad.setColorAt(0.0, QColor(250, 246, 226));
-    faceGrad.setColorAt(1.0, QColor(236, 230, 200));
+    faceGrad.setColorAt(0.0, sp.faceColorTop);
+    faceGrad.setColorAt(1.0, sp.faceColorBottom);
 
     p.setPen(QPen(QColor(0, 0, 0, 90), 1.5));
     p.setBrush(faceGrad);
-    p.drawRoundedRect(face, frameRadius * 0.75, frameRadius * 0.75);
-
-    // --- Bezel ---
-    const qreal bezelInset = std::max<qreal>(6.0, rect.width() * 0.02);
-    const QRectF bezel = rect.adjusted(bezelInset, bezelInset, -bezelInset, -bezelInset);
-    p.setPen(QPen(QColor(0, 0, 0, 45), 1.0));
-    p.setBrush(Qt::NoBrush);
-    p.drawRoundedRect(bezel, frameRadius * 0.85, frameRadius * 0.85);
+    p.drawRoundedRect(face, faceRadius, faceRadius);
 
     // --- Geometry ---
     const QPointF pivot(face.center().x(), face.bottom() + face.height() * 0.35);
@@ -131,6 +210,41 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
     };
     const float theta = angleForVu(vuDb);
 
+    // --- Draw needle with clipping to face area ---
+    // This makes the needle visible only within the face, hiding the pivot area
+    {
+        p.save();
+        
+        // Create clipping path for the face (rounded rectangle)
+        QPainterPath clipPath;
+        clipPath.addRoundedRect(face, faceRadius, faceRadius);
+        p.setClipPath(clipPath);
+        
+        // --- Needle shadow ---
+        const QPointF needleTip = polarFromBottomPivot(pivot, radius * 0.98, theta);
+        const QPointF shadowTip = needleTip + QPointF(2.0, 2.0);
+
+        // For Black style, use lighter shadow; for others, dark shadow
+        QColor shadowColor = (style_ == VUMeterStyle::Black) ? QColor(0, 0, 0, 120) : QColor(0, 0, 0, 80);
+        p.setPen(QPen(shadowColor, std::max<qreal>(3.0, rect.width() * 0.008), Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(pivot + QPointF(2.0, 2.0), shadowTip);
+
+        // --- Needle ---
+        // For Black style, use white needle; for others, black needle
+        QColor needleColor = (style_ == VUMeterStyle::Black) ? QColor(235, 235, 240) : QColor(10, 10, 10);
+        p.setPen(QPen(needleColor, std::max<qreal>(3.0, rect.width() * 0.008), Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(pivot, needleTip);
+        
+        p.restore();  // Restore clipping
+    }
+
+    // --- Bezel (drawn after needle so it appears on top) ---
+    const qreal bezelInset = std::max<qreal>(6.0, rect.width() * 0.02);
+    const QRectF bezel = rect.adjusted(bezelInset, bezelInset, -bezelInset, -bezelInset);
+    p.setPen(QPen(QColor(0, 0, 0, 45), 1.0));
+    p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(bezel, frameRadius * 0.85, frameRadius * 0.85);
+
     // --- Tick radii ---
     const qreal tickR1 = radius * 0.98;
     const qreal tickR2Major = radius * 1.10;
@@ -163,13 +277,15 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
         return int((logicalEndDeg - logicalStartDeg) * 16.0f);
     };
 
-    // --- Black arc: -48° → +18° ---
-    p.setPen(QPen(QColor(0, 0, 0, 200), blackWidth, Qt::SolidLine, Qt::FlatCap));
+    // --- Black arc: -48° → +18° (white for Black style) ---
+    QColor arcColor = (style_ == VUMeterStyle::Black) ? QColor(235, 235, 240, 200) : QColor(0, 0, 0, 200);
+    p.setPen(QPen(arcColor, blackWidth, Qt::SolidLine, Qt::FlatCap));
     p.drawArc(blackRect, arcStart(a0), arcSpan(aMin, a0));
 
     // --- Red arc: +18° → +48° ---
-    p.setPen(QPen(QColor(170, 20, 20), redWidth, Qt::SolidLine, Qt::FlatCap));
+    p.setPen(QPen(sp.redZoneColor, redWidth, Qt::SolidLine, Qt::FlatCap));
     p.drawArc(redRect, arcStart(a3), arcSpan(a0, a3));
+    
     // --- Tick marks ---
     for (float v : labels) {
         bool major = (v == -20.0f || v == -10.0f || v == -7.0f || v == -5.0f || v == -3.0f || v == -2.0f ||
@@ -180,9 +296,9 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
         const QPointF p1 = polarFromBottomPivot(pivot, tickR1, a);
         const QPointF p2 = polarFromBottomPivot(pivot, major ? tickR2Major : tickR2Minor, a);
 
-        QPen pen(QColor(0, 0, 0, 220), major ? 2.2 : 1.4, Qt::SolidLine, Qt::RoundCap);
+        QPen pen(sp.labelColor, major ? 2.2 : 1.4, Qt::SolidLine, Qt::RoundCap);
         if (v > 0.0f) {
-            pen.setColor(QColor(170, 20, 20));
+            pen.setColor(sp.redZoneColor);
         }
         p.setPen(pen);
         p.drawLine(p1, p2);
@@ -195,19 +311,22 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
             tf.setBold(true);
             tf.setStretch(92);
             tf.setLetterSpacing(QFont::PercentageSpacing, 92);
-            tf.setPointSizeF(rect.height() * 0.033);
+            tf.setPointSizeF(rect.height() * sp.labelSizeFactor);
             p.setFont(tf);
 
+            // Scale label bounding box with font size
+            const qreal labelBoxScale = sp.labelSizeFactor / 0.033;  // Relative to original
             const QPointF pt = polarFromBottomPivot(pivot, radius * 1.17, a);
-            const QRectF tr(pt.x() - 18.0, pt.y() - 10.0, 36.0, 20.0);
+            const QRectF tr(pt.x() - 18.0 * labelBoxScale, pt.y() - 10.0 * labelBoxScale, 
+                           36.0 * labelBoxScale, 20.0 * labelBoxScale);
 
-            p.setPen(v > 0.0f ? QColor(170, 20, 20) : QColor(0, 0, 0, 220));
+            p.setPen(v > 0.0f ? sp.redZoneColor : sp.labelColor);
             p.drawText(tr, Qt::AlignCenter, t);
         }
     }
 
     // --- VU text ---
-    auto drawVuTextAt = [&](float angleDeg, float radiusMul) {
+    auto drawVuTextAt = [&](float angleDeg, float radiusMul, qreal fontSize) {
         // Compute position on arc
         const qreal r = radius * radiusMul;
         const QPointF pos = polarFromBottomPivot(pivot, r, angleDeg);
@@ -220,45 +339,59 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
         vuFont.setBold(true);
         vuFont.setStretch(90);
         vuFont.setLetterSpacing(QFont::PercentageSpacing, 95);
-        vuFont.setPointSizeF(rect.height() * 0.045);
+        vuFont.setPointSizeF(fontSize);
         p.setFont(vuFont);
 
-        p.setPen(QColor(0, 0, 0, 210));
+        p.setPen(sp.labelColor);
 
-        // Centered text rect around origin
-        const QRectF vuRect(-face.width() * 0.20, -face.height() * 0.06, face.width() * 0.40, face.height() * 0.12);
+        // Scale text rect with font size
+        const qreal vuBoxScale = fontSize / (rect.height() * 0.045);
+        const QRectF vuRect(-face.width() * 0.20 * vuBoxScale, -face.height() * 0.06 * vuBoxScale, 
+                           face.width() * 0.40 * vuBoxScale, face.height() * 0.12 * vuBoxScale);
 
         p.drawText(vuRect, Qt::AlignCenter, "VU");
         p.restore();
     };
 
-    drawVuTextAt(-33.0f, 1.29f);
-    drawVuTextAt(33.0f, 1.29f);
+    const qreal vuFontSize = rect.height() * sp.vuTextSizeFactor;
+    
+    if (sp.singleVuText) {
+        // Single centered VU text (Sony/Modern style)
+        drawVuTextAt(0.0f, sp.vuTextRadius, vuFontSize);
+    } else {
+        // Two angled VU texts (Original/Vintage style)
+        drawVuTextAt(-33.0f, sp.vuTextRadius, vuFontSize);
+        drawVuTextAt(33.0f, sp.vuTextRadius, vuFontSize);
+    }
 
-    // --- Needle shadow ---
-    const QPointF needleTip = polarFromBottomPivot(pivot, radius * 0.98, theta);
-    const QPointF shadowTip = needleTip + QPointF(2.0, 2.0);
+    // --- SONY logo for Sony style ---
+    if (style_ == VUMeterStyle::Sony && !sonyFontFamily_.isEmpty()) {
+        p.save();
+        
+        QFont sonyFont(sonyFontFamily_);
+        sonyFont.setPointSizeF(rect.height() * 0.075);  // Adjust size as needed
+        sonyFont.setBold(false);
+        p.setFont(sonyFont);
+        p.setPen(sp.labelColor);
+        
+        // Position in top-left corner of face with some padding
+        const qreal padding = face.width() * 0.04;
+        const qreal sonyX = face.left() + padding;
+        const qreal sonyY = face.top() + padding;
+        
+        // Apply vertical compression (0.80 = 20% shorter height)
+        p.translate(sonyX, sonyY);
+        p.scale(1.0, 0.80);
+        
+        // Draw at origin since we've already translated
+        const QRectF sonyRect(0, 0, face.width() * 0.25, face.height() * 0.15 / 0.80);
+        p.drawText(sonyRect, Qt::AlignLeft | Qt::AlignTop, "SONY");
+        
+        p.restore();
+    }
 
-    p.setPen(QPen(QColor(0, 0, 0, 80), std::max<qreal>(3.0, rect.width() * 0.008), Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(pivot + QPointF(2.0, 2.0), shadowTip);
-
-    // --- Needle ---
-    p.setPen(QPen(QColor(10, 10, 10), std::max<qreal>(3.0, rect.width() * 0.008), Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(pivot, needleTip);
-
-    // --- Pivot cap ---
+    // --- Pivot cap (no longer needed since needle is clipped, but keep the line) ---
     const qreal capR = std::max<qreal>(10.0, rect.width() * 0.04);
-    QRadialGradient capGrad(pivot, capR);
-    capGrad.setColorAt(0.0, QColor(210, 210, 210));
-    capGrad.setColorAt(0.6, QColor(90, 90, 92));
-    capGrad.setColorAt(1.0, QColor(20, 20, 22));
-
-    p.setPen(QPen(QColor(0, 0, 0, 120), 1.5));
-    p.setBrush(capGrad);
-    // p.drawEllipse(pivot, capR, capR);
-
-    p.setPen(QPen(QColor(0, 0, 0, 120), 2.0, Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(pivot + QPointF(-capR * 0.35, 0.0), pivot + QPointF(capR * 0.35, 0.0));
 
     p.restore();
 }

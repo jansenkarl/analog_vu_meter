@@ -77,6 +77,17 @@ void MainWindow::createMenuBar() {
     QAction* refreshAction = audioMenu_->addAction(tr("&Refresh Devices"));
     connect(refreshAction, &QAction::triggered, this, &MainWindow::refreshDeviceMenu);
 
+    // Style menu
+    styleMenu_ = menuBar->addMenu(tr("&Style"));
+    
+    // Create action group for exclusive style selection
+    styleActionGroup_ = new QActionGroup(this);
+    styleActionGroup_->setExclusive(true);
+    connect(styleActionGroup_, &QActionGroup::triggered, this, &MainWindow::onStyleSelected);
+    
+    // Populate the style menu
+    populateStyleMenu();
+
     // About action - Qt automatically moves this to the app menu on macOS
     QAction* aboutAction = new QAction(tr("About Analog VU Meter"), this);
     aboutAction->setMenuRole(QAction::AboutRole);
@@ -205,4 +216,40 @@ void MainWindow::onReferenceSelected(QAction* action) {
 
 void MainWindow::refreshDeviceMenu() {
     populateDeviceMenu();
+}
+
+void MainWindow::populateStyleMenu() {
+    // Style options with their enum values
+    struct StyleInfo {
+        QString name;
+        VUMeterStyle style;
+    };
+    
+    const StyleInfo styles[] = {
+        {tr("Original"), VUMeterStyle::Original},
+        {tr("Sony"), VUMeterStyle::Sony},
+        {tr("Vintage"), VUMeterStyle::Vintage},
+        {tr("Modern"), VUMeterStyle::Modern},
+        {tr("Black"), VUMeterStyle::Black}
+    };
+    
+    VUMeterStyle currentStyle = meter_->style();
+    
+    for (const StyleInfo& info : styles) {
+        QAction* action = styleMenu_->addAction(info.name);
+        action->setCheckable(true);
+        action->setData(static_cast<int>(info.style));
+        styleActionGroup_->addAction(action);
+        
+        // Check if this is the current style
+        if (info.style == currentStyle) {
+            action->setChecked(true);
+        }
+    }
+}
+
+void MainWindow::onStyleSelected(QAction* action) {
+    int styleValue = action->data().toInt();
+    VUMeterStyle style = static_cast<VUMeterStyle>(styleValue);
+    meter_->setStyle(style);
 }

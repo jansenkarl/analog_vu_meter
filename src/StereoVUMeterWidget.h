@@ -1,11 +1,21 @@
 #pragma once
 
+#include <QFont>
 #include <QWidget>
 
 class QPaintEvent;
 class QPainter;
 class QRectF;
 class QString;
+
+// VU Meter visual styles
+enum class VUMeterStyle {
+    Original,  // Current/default style
+    Sony,      // Larger text, Sony-inspired
+    Vintage,   // Warm vintage colors
+    Modern,    // Clean modern look
+    Black      // Modern style with inverted black/white colors
+};
 
 class StereoVUMeterWidget final : public QWidget {
     Q_OBJECT
@@ -14,6 +24,9 @@ class StereoVUMeterWidget final : public QWidget {
     explicit StereoVUMeterWidget(QWidget* parent = nullptr);
 
     void setLevels(float leftVuDb, float rightVuDb);
+    
+    void setStyle(VUMeterStyle style);
+    VUMeterStyle style() const { return style_; }
 
   protected:
     void paintEvent(QPaintEvent* event) override;
@@ -21,6 +34,22 @@ class StereoVUMeterWidget final : public QWidget {
   private:
     float left_ = -20.0f;
     float right_ = -20.0f;
+    VUMeterStyle style_ = VUMeterStyle::Original;
+    QString sonyFontFamily_;  // Font family name for SONY logo
 
     void drawMeter(QPainter& p, const QRectF& rect, float vuDb);
+    
+    // Style-dependent parameters
+    struct StyleParams {
+        qreal labelSizeFactor;      // Font size factor for tick labels
+        qreal vuTextSizeFactor;     // Font size factor for "VU" text
+        qreal vuTextRadius;         // Radius multiplier for VU text position
+        bool singleVuText;          // Draw single centered VU vs two angled
+        QColor faceColorTop;        // Face gradient top color
+        QColor faceColorBottom;     // Face gradient bottom color
+        QColor labelColor;          // Color for labels (non-red zone)
+        QColor redZoneColor;        // Color for red zone elements
+    };
+    
+    StyleParams getStyleParams() const;
 };
