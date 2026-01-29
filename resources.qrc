@@ -1,6 +1,9 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
-    <qresource prefix="/fonts">
-        <file alias="clarendon_regular.otf">fonts/clarendon_regular.otf</file>
+    <qresource prefix="/">
+        <file>fonts/clarendon_regular.otf</file>
+        <file>images/model_702w/0.png</file>
+        <file>images/model_702w/1.png</file>
+        <file>images/model_702w/2.png</file>
     </qresource>
 </RCC>

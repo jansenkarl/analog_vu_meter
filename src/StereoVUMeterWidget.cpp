@@ -7,6 +7,8 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <qnamespace.h>
+#include <qpixmap.h>
+#include <qtypes.h>
 
 static constexpr float kPi = 3.14159265358979323846f;
 
@@ -20,7 +22,7 @@ static QPointF polarFromBottomPivot(const QPointF& pivot, float radius, float th
 StereoVUMeterWidget::StereoVUMeterWidget(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
-    
+
     // Load the SONY logo font from resources
     int fontId = QFontDatabase::addApplicationFont(":/fonts/clarendon_regular.otf");
     if (fontId != -1) {
@@ -109,42 +111,50 @@ void StereoVUMeterWidget::setLevels(float leftVuDb, float rightVuDb) {
 }
 
 void StereoVUMeterWidget::paintEvent(QPaintEvent*) {
+    // Set up painter
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
+    p.fillRect(rect(), Qt::black);
 
+    // Full widget area
     const QRectF r = rect();
 
-    QLinearGradient bg(r.topLeft(), r.bottomRight());
-    bg.setColorAt(0.0, QColor(20, 20, 22));
-    bg.setColorAt(1.0, QColor(6, 6, 7));
-    p.fillRect(r, bg);
+    // Load meter face image once (static keeps it cached) and get its aspect ratio
+    static QPixmap meterFace(":/images/model_702w/0.png");
+    const qreal aspect = qreal(meterFace.width()) / qreal(meterFace.height());
 
-    // Outer padding
+    // Outer padding around the meters
     const qreal outerPad = std::max<qreal>(14.0, r.width() * 0.02);
     const QRectF inner = r.adjusted(outerPad, outerPad, -outerPad, -outerPad);
 
-    // Target aspect ratio for each meter (width : height)
-    const qreal aspect = 1.75; // tweak this to taste
-
-    // Horizontal layout: two meters + gap
+    // Horizontal gap between left and right meters
     const qreal gap = std::max<qreal>(16.0, inner.width() * 0.03);
+
+    // Compute meter size based on available width
     qreal meterW = (inner.width() - gap) / 2.0;
     qreal meterH = meterW / aspect;
 
-    // If we don't have enough vertical space, clamp by height instead
+    // Clamp by height if needed
     if (meterH > inner.height()) {
         meterH = inner.height();
         meterW = meterH * aspect;
     }
 
+    // Vertical centering
     const qreal y = inner.center().y() - meterH / 2.0;
 
+    // Final rectangles for left and right meter faces
     const QRectF leftRect(inner.left(), y, meterW, meterH);
     const QRectF rightRect(leftRect.right() + gap, y, meterW, meterH);
 
-    drawMeter(p, leftRect, left_);
-    drawMeter(p, rightRect, right_);
+    // Draw the meter face images
+    p.drawPixmap(leftRect, meterFace, meterFace.rect());
+    p.drawPixmap(rightRect, meterFace, meterFace.rect());
+
+    // Future: draw needles on top
+    // drawMeter(p, leftRect, left_);
+    // drawMeter(p, rightRect, right_);
 }
 
 void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb) {
