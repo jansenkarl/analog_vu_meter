@@ -6,6 +6,10 @@
 !CMakeLists.txt
 !.clang-format
 
+!resources.qrc
+!resources/
+!resources/**
+
 !src/
 !src/**
 
