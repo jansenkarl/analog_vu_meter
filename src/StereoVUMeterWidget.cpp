@@ -23,8 +23,7 @@ StereoVUMeterWidget::StereoVUMeterWidget(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
 
-    meterFace_.load(":/images/model_702w/0.png");
-
+    loadDefaultSkin();
     // Load the SONY logo font from resources
     int fontId = QFontDatabase::addApplicationFont(":/fonts/clarendon_regular.otf");
     if (fontId != -1) {
@@ -123,16 +122,15 @@ void StereoVUMeterWidget::paintEvent(QPaintEvent*) {
     const QRectF r = rect();
 
     // Load meter face image once (static keeps it cached) and get its aspect ratio
-    // static QPixmap meterFace(":/images/model_702w/0.png");
-    // const qreal aspect = qreal(meterFace.width()) / qreal(meterFace.height());
-    const qreal aspect = qreal(meterFace_.width()) / qreal(meterFace_.height());
+    const qreal aspect = qreal(skin_.single.face.width()) / qreal(skin_.single.face.height());
 
     // Outer padding around the meters
     const qreal outerPad = std::max<qreal>(14.0, r.width() * 0.02);
     const QRectF inner = r.adjusted(outerPad, outerPad, -outerPad, -outerPad);
 
     // Horizontal gap between left and right meters
-    const qreal gap = std::max<qreal>(16.0, inner.width() * 0.03);
+    //const qreal gap = std::max<qreal>(16.0, inner.width() * 0.03);
+    const qreal gap = skin_.isStereo ? 0.0 : std::max<qreal>(16.0, inner.width() * 0.03);
 
     // Compute meter size based on available width
     qreal meterW = (inner.width() - gap) / 2.0;
@@ -152,47 +150,55 @@ void StereoVUMeterWidget::paintEvent(QPaintEvent*) {
     const QRectF rightRect(leftRect.right() + gap, y, meterW, meterH);
 
     // Draw the meter face images
-    p.drawPixmap(leftRect, meterFace_, meterFace_.rect());
-    p.drawPixmap(rightRect, meterFace_, meterFace_.rect());
+    p.drawPixmap(leftRect, skin_.left.face, skin_.left.face.rect());
+    p.drawPixmap(rightRect, skin_.right.face, skin_.right.face.rect());
 
-    // Future: draw needles on top
-    drawMeterImageOnly(p, leftRect, left_);
-    drawMeterImageOnly(p, rightRect, right_);
+    // Draw needles on top
+    drawMeterImageOnly(p, leftRect, left_, skin_.left);
+    drawMeterImageOnly(p, rightRect, right_, skin_.right);
 }
 
-void StereoVUMeterWidget::drawMeterImageOnly(QPainter& p, const QRectF& rect, float vuDb) {
+void StereoVUMeterWidget::drawMeterImageOnly(QPainter& p, const QRectF& rect, float vuDb, VUMeterSkin& skin) {
     p.save();
 
-    // Load images once
-    static QPixmap needleImg(":/images/model_702w/1.png");
-    static QPixmap capImg(":/images/model_702w/2.png");
+    // --- Compute pivot in widget coordinates ---
+    const qreal scaleX = rect.width() / skin.face.width();
+    const qreal scaleY = rect.height() / skin.face.height();
 
-    // --- Pivot point from INI, scaled to current meter face size ---
-    // const QPointF pivot(rect.left() + 0.0 * (rect.width() / meterFace_.width()),
-    //                     rect.top() + 0.0 * (rect.height() / meterFace_.height()));
-    const QPointF pivot((rect.width() / meterFace_.width()) / 2.0, rect.height() / meterFace_.height());
+    const QPointF pivot(rect.left() + skin.calib.pivotX * scaleX, rect.top() + skin.calib.pivotY * scaleY);
 
-    // --- DEBUG MODE: No rotation, just place needle so pivot aligns ---
+    // --- Compute rotation angle ---
+    float angleDeg = 0.0f;
+
+    if (vuDb <= skin.calib.minLevel)
+        angleDeg = skin.calib.minAngle;
+    else if (vuDb >= skin.calib.maxLevel)
+        angleDeg = skin.calib.maxAngle;
+    else if (vuDb < skin.calib.zeroLevel) {
+        float t = (vuDb - skin.calib.minLevel) / (skin.calib.zeroLevel - skin.calib.minLevel);
+        angleDeg = skin.calib.minAngle + t * (skin.calib.zeroAngle - skin.calib.minAngle);
+    } else {
+        float t = (vuDb - skin.calib.zeroLevel) / (skin.calib.maxLevel - skin.calib.zeroLevel);
+        angleDeg = skin.calib.zeroAngle + t * (skin.calib.maxAngle - skin.calib.zeroAngle);
+    }
+
+    // --- Rotate ONLY the needle ---
     {
         p.save();
 
-        // Needle pivot is at left-center of the PNG
-        //const QPointF needleOffset(0.0, needleImg.height() / 2.0);
-        const QPointF needleOffset(0.0, 0.0);
+        // Rotate around pivot
+        p.translate(pivot);
+        p.rotate(angleDeg);
+        p.translate(-pivot);
 
-        // Position so that pivot pixel sits exactly at the computed pivot
-        const QPointF drawPos = pivot - needleOffset;
+        // Draw needle exactly as before (same rect)
+        p.drawPixmap(rect, skin.needle, skin.needle.rect());
 
-        p.drawPixmap(drawPos, needleImg);
-
-        p.restore();
+        p.restore(); // <-- restores painter so cap is NOT rotated
     }
 
-    // --- Draw pivot cap (still useful for alignment testing) ---
-    {
-        //const QPointF capPos = pivot - QPointF(capImg.width() / 2.0, capImg.height() / 2.0);
-        //p.drawPixmap(rect, capImg, capImg.rect());
-    }
+    // --- Draw cap overlay (no rotation) ---
+    p.drawPixmap(rect, skin.cap, skin.cap.rect());
 
     p.restore();
 }
@@ -444,4 +450,35 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
     const qreal capR = std::max<qreal>(10.0, rect.width() * 0.04);
 
     p.restore();
+}
+
+void StereoVUMeterWidget::loadDefaultSkin() {
+    // Hard-coded single meter skin for now
+    skin_.isStereo = false;
+
+    VUMeterSkin s;
+
+    s.face.load(":/images/model_702w/0.png");
+    s.needle.load(":/images/model_702w/1.png");
+    s.cap.load(":/images/model_702w/2.png");
+
+    s.calib.minAngle = -47;
+    s.calib.minLevel = -20;
+    s.calib.zeroAngle = 20;
+    s.calib.zeroLevel = 0;
+    s.calib.maxAngle = 47;
+    s.calib.maxLevel = 3;
+
+    s.calib.pivotX = 310;
+    s.calib.pivotY = 362;
+
+    s.calib.mobilityNeg = 0.05;
+    s.calib.mobilityPos = 0.10;
+
+    // Store single meter
+    skin_.single = s;
+
+    // Duplicate into stereo (your rule)
+    skin_.left = s;
+    skin_.right = s;
 }

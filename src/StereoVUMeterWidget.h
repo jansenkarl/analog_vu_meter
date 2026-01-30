@@ -17,6 +17,40 @@ enum class VUMeterStyle {
     Black      // Modern style with inverted black/white colors
 };
 
+struct VUMeterCalibration {
+    int minAngle;
+    int minLevel;
+    int zeroAngle;
+    int zeroLevel;
+    int maxAngle;
+    int maxLevel;
+
+    int pivotX;
+    int pivotY;
+
+    qreal mobilityNeg;
+    qreal mobilityPos;
+};
+
+struct VUMeterSkin {
+    QPixmap face;
+    QPixmap needle;
+    QPixmap cap;
+
+    VUMeterCalibration calib;
+};
+
+struct VUSkinPackage {
+    bool isStereo = false; // false = single meter, true = double meter
+
+    // Single meter
+    VUMeterSkin single;
+
+    // Stereo meters
+    VUMeterSkin left;
+    VUMeterSkin right;
+};
+
 class StereoVUMeterWidget final : public QWidget {
     Q_OBJECT
 
@@ -37,10 +71,10 @@ class StereoVUMeterWidget final : public QWidget {
     VUMeterStyle style_ = VUMeterStyle::Original;
     QString sonyFontFamily_;  // Font family name for SONY logo
 
-    QPixmap meterFace_;
-    void drawMeterImageOnly(QPainter& p, const QRectF& rect, float vuDb);
+    //QPixmap meterFace_;
+    void drawMeterImageOnly(QPainter& p, const QRectF& rect, float vuDb, VUMeterSkin& skin);
     void drawMeter(QPainter& p, const QRectF& rect, float vuDb);
-    
+
     // Style-dependent parameters
     struct StyleParams {
         qreal labelSizeFactor;      // Font size factor for tick labels
@@ -52,6 +86,9 @@ class StereoVUMeterWidget final : public QWidget {
         QColor labelColor;          // Color for labels (non-red zone)
         QColor redZoneColor;        // Color for red zone elements
     };
-    
+
     StyleParams getStyleParams() const;
+
+    VUSkinPackage skin_;
+    void loadDefaultSkin();
 };
