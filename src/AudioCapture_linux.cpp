@@ -14,8 +14,8 @@ static constexpr float kMinVu = -22.0f;
 static constexpr float kMaxVu = 3.0f;
 
 AudioCapture::AudioCapture(const Options& options, QObject* parent)
-    : QObject(parent), options_(options), currentDeviceUID_(options.deviceName),
-      ballisticsL_(kMinVu), ballisticsR_(kMinVu) {}
+    : QObject(parent), options_(options), currentDeviceUID_(options.deviceName), ballisticsL_(kMinVu),
+      ballisticsR_(kMinVu) {}
 
 AudioCapture::~AudioCapture() { stop(); }
 
@@ -104,34 +104,30 @@ void AudioCapture::stop() {
 bool AudioCapture::switchDevice(const QString& deviceUID, QString* errorOut) {
     // Stop current capture
     stop();
-    
+
     // Reset ballistics
     ballisticsL_.reset(kMinVu);
     ballisticsR_.reset(kMinVu);
     leftVuDb_.store(kMinVu, std::memory_order_relaxed);
     rightVuDb_.store(kMinVu, std::memory_order_relaxed);
-    
+
     // Update options with new device
     options_.deviceName = deviceUID;
-    
+
     // Restart with new device
     bool success = start(errorOut);
-    
+
     if (success) {
         currentDeviceUID_ = deviceUID;
         emit deviceChanged(deviceUID);
     }
-    
+
     return success;
 }
 
-QString AudioCapture::currentDeviceUID() const {
-    return currentDeviceUID_;
-}
+QString AudioCapture::currentDeviceUID() const { return currentDeviceUID_; }
 
-double AudioCapture::referenceDbfs() const {
-    return options_.referenceDbfs;
-}
+double AudioCapture::referenceDbfs() const { return options_.referenceDbfs; }
 
 void AudioCapture::setReferenceDbfs(double value) {
     options_.referenceDbfs = value;
@@ -202,14 +198,14 @@ QList<AudioCapture::DeviceInfo> AudioCapture::enumerateInputDevices() {
             return;
 
         auto* ctx = static_cast<SourceListContext*>(userdata);
-        
+
         DeviceInfo device;
         device.name = QString::fromUtf8(info->description);
         device.uid = QString::fromUtf8(info->name);
         device.channels = static_cast<int>(info->sample_spec.channels);
         device.isInput = true;
         device.isDefault = (QString::fromUtf8(info->name) == ctx->defaultName);
-        
+
         ctx->result->append(device);
     };
 

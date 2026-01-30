@@ -1,8 +1,8 @@
 #pragma once
 
+#include <QList>
 #include <QObject>
 #include <QString>
-#include <QList>
 
 #include <atomic>
 #include <thread>
@@ -57,7 +57,7 @@ class AudioCapture final : public QObject {
 
     // Switch to a different audio device at runtime
     bool switchDevice(const QString& deviceUID, QString* errorOut = nullptr);
-    
+
     // Get the currently active device UID
     QString currentDeviceUID() const;
 
@@ -70,7 +70,7 @@ class AudioCapture final : public QObject {
 
     // Get list of available input devices (for UI)
     static QList<DeviceInfo> enumerateInputDevices();
-    
+
     // Legacy: string output for command line
     static QString listDevicesString();
 
@@ -87,7 +87,7 @@ class AudioCapture final : public QObject {
                                    const void* inStartTime,
                                    unsigned int inNumberPacketDescriptions,
                                    const void* inPacketDescs);
-    
+
     void processAudioBuffer(const float* data, unsigned int frames, unsigned int channels, float sampleRate);
 #else
     // PulseAudio callbacks
@@ -111,7 +111,7 @@ class AudioCapture final : public QObject {
     AudioQueueRef audioQueue_ = nullptr;
     static constexpr int kNumBuffers = 3;
     AudioQueueBuffer* buffers_[kNumBuffers] = {};
-    
+
     // Smoothed RMS values (persistent across callbacks)
     float rmsL_smooth_ = 0.0f;
     float rmsR_smooth_ = 0.0f;

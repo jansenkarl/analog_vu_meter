@@ -1,7 +1,7 @@
 #pragma once
 
-#include <QMainWindow>
 #include <QActionGroup>
+#include <QMainWindow>
 
 #include "AudioCapture.h"
 
@@ -35,7 +35,7 @@ class MainWindow final : public QMainWindow {
 
     AudioCapture audio_;
     StereoVUMeterWidget* meter_ = nullptr;
-    
+
     // Menu components
     QMenu* audioMenu_ = nullptr;
     QMenu* deviceMenu_ = nullptr;

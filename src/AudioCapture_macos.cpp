@@ -12,8 +12,8 @@ static constexpr float kMinVu = -22.0f;
 static constexpr float kMaxVu = 3.0f;
 
 AudioCapture::AudioCapture(const Options& options, QObject* parent)
-    : QObject(parent), options_(options), currentDeviceUID_(options.deviceName), 
-      ballisticsL_(kMinVu), ballisticsR_(kMinVu) {}
+    : QObject(parent), options_(options), currentDeviceUID_(options.deviceName), ballisticsL_(kMinVu),
+      ballisticsR_(kMinVu) {}
 
 AudioCapture::~AudioCapture() { stop(); }
 
@@ -28,7 +28,7 @@ bool AudioCapture::start(QString* errorOut) {
     format.mFormatID = kAudioFormatLinearPCM;
     format.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked;
     format.mBitsPerChannel = 32;
-    format.mChannelsPerFrame = 2;  // Stereo
+    format.mChannelsPerFrame = 2; // Stereo
     format.mBytesPerFrame = format.mChannelsPerFrame * sizeof(float);
     format.mFramesPerPacket = 1;
     format.mBytesPerPacket = format.mBytesPerFrame;
@@ -36,20 +36,25 @@ bool AudioCapture::start(QString* errorOut) {
     // Create the audio queue for input
     OSStatus status = AudioQueueNewInput(
         &format,
-        [](void* inUserData, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer,
-           const AudioTimeStamp* inStartTime, UInt32 inNumberPacketDescriptions,
+        [](void* inUserData,
+           AudioQueueRef inAQ,
+           AudioQueueBufferRef inBuffer,
+           const AudioTimeStamp* inStartTime,
+           UInt32 inNumberPacketDescriptions,
            const AudioStreamPacketDescription* inPacketDescs) {
             // Bridge to our static callback
-            AudioCapture::audioInputCallback(inUserData, inAQ, 
-                reinterpret_cast<AudioQueueBuffer*>(inBuffer),
-                inStartTime, inNumberPacketDescriptions, inPacketDescs);
+            AudioCapture::audioInputCallback(inUserData,
+                                             inAQ,
+                                             reinterpret_cast<AudioQueueBuffer*>(inBuffer),
+                                             inStartTime,
+                                             inNumberPacketDescriptions,
+                                             inPacketDescs);
         },
         this,
-        nullptr,  // Run loop (null = use internal thread)
-        nullptr,  // Run loop mode
-        0,        // Reserved
-        &audioQueue_
-    );
+        nullptr, // Run loop (null = use internal thread)
+        nullptr, // Run loop mode
+        0,       // Reserved
+        &audioQueue_);
 
     if (status != noErr) {
         if (errorOut) {
@@ -63,20 +68,12 @@ bool AudioCapture::start(QString* errorOut) {
     // Note: macOS system audio loopback requires special handling or third-party extensions
     if (!options_.deviceName.isEmpty()) {
         CFStringRef deviceUID = CFStringCreateWithCString(
-            kCFAllocatorDefault,
-            options_.deviceName.toUtf8().constData(),
-            kCFStringEncodingUTF8
-        );
-        
-        status = AudioQueueSetProperty(
-            audioQueue_,
-            kAudioQueueProperty_CurrentDevice,
-            &deviceUID,
-            sizeof(deviceUID)
-        );
-        
+            kCFAllocatorDefault, options_.deviceName.toUtf8().constData(), kCFStringEncodingUTF8);
+
+        status = AudioQueueSetProperty(audioQueue_, kAudioQueueProperty_CurrentDevice, &deviceUID, sizeof(deviceUID));
+
         CFRelease(deviceUID);
-        
+
         if (status != noErr) {
             if (errorOut) {
                 *errorOut = QStringLiteral("Failed to set audio device: %1").arg(status);
@@ -91,16 +88,16 @@ bool AudioCapture::start(QString* errorOut) {
         // Get the default input device UID
         AudioDeviceID defaultInput = 0;
         AudioObjectPropertyAddress propertyAddress = {
-            kAudioHardwarePropertyDefaultInputDevice,
-            kAudioObjectPropertyScopeGlobal,
-            kAudioObjectPropertyElementMain
-        };
+            kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
         UInt32 dataSize = sizeof(defaultInput);
-        if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize, &defaultInput) == noErr) {
+        if (AudioObjectGetPropertyData(
+                kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize, &defaultInput) == noErr) {
             CFStringRef deviceUID = nullptr;
             propertyAddress.mSelector = kAudioDevicePropertyDeviceUID;
             dataSize = sizeof(deviceUID);
-            if (AudioObjectGetPropertyData(defaultInput, &propertyAddress, 0, nullptr, &dataSize, &deviceUID) == noErr && deviceUID) {
+            if (AudioObjectGetPropertyData(defaultInput, &propertyAddress, 0, nullptr, &dataSize, &deviceUID) ==
+                    noErr &&
+                deviceUID) {
                 currentDeviceUID_ = QString::fromCFString(deviceUID);
                 CFRelease(deviceUID);
             }
@@ -109,10 +106,10 @@ bool AudioCapture::start(QString* errorOut) {
 
     // Allocate and enqueue buffers
     UInt32 bufferSize = options_.framesPerBuffer * format.mBytesPerFrame;
-    
+
     for (int i = 0; i < kNumBuffers; ++i) {
-        status = AudioQueueAllocateBuffer(audioQueue_, bufferSize, 
-            reinterpret_cast<AudioQueueBufferRef*>(&buffers_[i]));
+        status =
+            AudioQueueAllocateBuffer(audioQueue_, bufferSize, reinterpret_cast<AudioQueueBufferRef*>(&buffers_[i]));
         if (status != noErr) {
             if (errorOut) {
                 *errorOut = QStringLiteral("Failed to allocate audio buffer: %1").arg(status);
@@ -122,9 +119,8 @@ bool AudioCapture::start(QString* errorOut) {
             running_.store(false, std::memory_order_relaxed);
             return false;
         }
-        
-        status = AudioQueueEnqueueBuffer(audioQueue_, 
-            reinterpret_cast<AudioQueueBufferRef>(buffers_[i]), 0, nullptr);
+
+        status = AudioQueueEnqueueBuffer(audioQueue_, reinterpret_cast<AudioQueueBufferRef>(buffers_[i]), 0, nullptr);
         if (status != noErr) {
             if (errorOut) {
                 *errorOut = QStringLiteral("Failed to enqueue audio buffer: %1").arg(status);
@@ -173,7 +169,7 @@ void AudioCapture::stop() {
 bool AudioCapture::switchDevice(const QString& deviceUID, QString* errorOut) {
     // Stop current capture
     stop();
-    
+
     // Reset ballistics and smoothed values
     rmsL_smooth_ = 0.0f;
     rmsR_smooth_ = 0.0f;
@@ -184,28 +180,24 @@ bool AudioCapture::switchDevice(const QString& deviceUID, QString* errorOut) {
     ballisticsR_.reset(kMinVu);
     leftVuDb_.store(kMinVu, std::memory_order_relaxed);
     rightVuDb_.store(kMinVu, std::memory_order_relaxed);
-    
+
     // Update options with new device
     options_.deviceName = deviceUID;
-    
+
     // Restart with new device
     bool success = start(errorOut);
-    
+
     if (success) {
         currentDeviceUID_ = deviceUID;
         emit deviceChanged(deviceUID);
     }
-    
+
     return success;
 }
 
-QString AudioCapture::currentDeviceUID() const {
-    return currentDeviceUID_;
-}
+QString AudioCapture::currentDeviceUID() const { return currentDeviceUID_; }
 
-double AudioCapture::referenceDbfs() const {
-    return options_.referenceDbfs;
-}
+double AudioCapture::referenceDbfs() const { return options_.referenceDbfs; }
 
 void AudioCapture::setReferenceDbfs(double value) {
     options_.referenceDbfs = value;
@@ -220,19 +212,10 @@ QList<AudioCapture::DeviceInfo> AudioCapture::enumerateInputDevices() {
     QList<DeviceInfo> result;
 
     AudioObjectPropertyAddress propertyAddress = {
-        kAudioHardwarePropertyDevices,
-        kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain
-    };
+        kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
 
     UInt32 dataSize = 0;
-    OSStatus status = AudioObjectGetPropertyDataSize(
-        kAudioObjectSystemObject,
-        &propertyAddress,
-        0,
-        nullptr,
-        &dataSize
-    );
+    OSStatus status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize);
 
     if (status != noErr) {
         return result;
@@ -241,14 +224,8 @@ QList<AudioCapture::DeviceInfo> AudioCapture::enumerateInputDevices() {
     UInt32 deviceCount = dataSize / sizeof(AudioDeviceID);
     std::vector<AudioDeviceID> devices(deviceCount);
 
-    status = AudioObjectGetPropertyData(
-        kAudioObjectSystemObject,
-        &propertyAddress,
-        0,
-        nullptr,
-        &dataSize,
-        devices.data()
-    );
+    status =
+        AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize, devices.data());
 
     if (status != noErr) {
         return result;
@@ -264,16 +241,18 @@ QList<AudioCapture::DeviceInfo> AudioCapture::enumerateInputDevices() {
         // Check if device has input channels
         propertyAddress.mSelector = kAudioDevicePropertyStreamConfiguration;
         propertyAddress.mScope = kAudioDevicePropertyScopeInput;
-        
+
         dataSize = 0;
         status = AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nullptr, &dataSize);
-        if (status != noErr) continue;
+        if (status != noErr)
+            continue;
 
         std::vector<UInt8> bufferListData(dataSize);
         AudioBufferList* bufferList = reinterpret_cast<AudioBufferList*>(bufferListData.data());
-        
+
         status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nullptr, &dataSize, bufferList);
-        if (status != noErr) continue;
+        if (status != noErr)
+            continue;
 
         UInt32 inputChannels = 0;
         for (UInt32 i = 0; i < bufferList->mNumberBuffers; ++i) {
@@ -285,13 +264,14 @@ QList<AudioCapture::DeviceInfo> AudioCapture::enumerateInputDevices() {
             info.channels = static_cast<int>(inputChannels);
             info.isInput = true;
             info.isDefault = (deviceID == defaultInput);
-            
+
             // Get device name
             CFStringRef deviceName = nullptr;
             propertyAddress.mSelector = kAudioDevicePropertyDeviceNameCFString;
             propertyAddress.mScope = kAudioObjectPropertyScopeGlobal;
             dataSize = sizeof(deviceName);
-            if (AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nullptr, &dataSize, &deviceName) == noErr && deviceName) {
+            if (AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nullptr, &dataSize, &deviceName) == noErr &&
+                deviceName) {
                 info.name = QString::fromCFString(deviceName);
                 CFRelease(deviceName);
             } else {
@@ -302,7 +282,8 @@ QList<AudioCapture::DeviceInfo> AudioCapture::enumerateInputDevices() {
             CFStringRef deviceUID = nullptr;
             propertyAddress.mSelector = kAudioDevicePropertyDeviceUID;
             dataSize = sizeof(deviceUID);
-            if (AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nullptr, &dataSize, &deviceUID) == noErr && deviceUID) {
+            if (AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nullptr, &dataSize, &deviceUID) == noErr &&
+                deviceUID) {
                 info.uid = QString::fromCFString(deviceUID);
                 CFRelease(deviceUID);
             }
@@ -319,19 +300,10 @@ QString AudioCapture::listDevicesString() {
     out += "CoreAudio devices:\n\n";
 
     AudioObjectPropertyAddress propertyAddress = {
-        kAudioHardwarePropertyDevices,
-        kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain
-    };
+        kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
 
     UInt32 dataSize = 0;
-    OSStatus status = AudioObjectGetPropertyDataSize(
-        kAudioObjectSystemObject,
-        &propertyAddress,
-        0,
-        nullptr,
-        &dataSize
-    );
+    OSStatus status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize);
 
     if (status != noErr) {
         return "Failed to get audio devices\n";
@@ -340,14 +312,8 @@ QString AudioCapture::listDevicesString() {
     UInt32 deviceCount = dataSize / sizeof(AudioDeviceID);
     std::vector<AudioDeviceID> devices(deviceCount);
 
-    status = AudioObjectGetPropertyData(
-        kAudioObjectSystemObject,
-        &propertyAddress,
-        0,
-        nullptr,
-        &dataSize,
-        devices.data()
-    );
+    status =
+        AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize, devices.data());
 
     if (status != noErr) {
         return "Failed to enumerate audio devices\n";
@@ -366,21 +332,23 @@ QString AudioCapture::listDevicesString() {
     AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize, &defaultOutput);
 
     out += "=== Input Devices ===\n";
-    
+
     for (AudioDeviceID deviceID : devices) {
         // Check if device has input channels
         propertyAddress.mSelector = kAudioDevicePropertyStreamConfiguration;
         propertyAddress.mScope = kAudioDevicePropertyScopeInput;
-        
+
         dataSize = 0;
         status = AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nullptr, &dataSize);
-        if (status != noErr) continue;
+        if (status != noErr)
+            continue;
 
         std::vector<UInt8> bufferListData(dataSize);
         AudioBufferList* bufferList = reinterpret_cast<AudioBufferList*>(bufferListData.data());
-        
+
         status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nullptr, &dataSize, bufferList);
-        if (status != noErr) continue;
+        if (status != noErr)
+            continue;
 
         UInt32 inputChannels = 0;
         for (UInt32 i = 0; i < bufferList->mNumberBuffers; ++i) {
@@ -409,27 +377,31 @@ QString AudioCapture::listDevicesString() {
             out += QString("  UID: %1\n").arg(uid);
             out += QString("  Channels: %1\n\n").arg(inputChannels);
 
-            if (deviceName) CFRelease(deviceName);
-            if (deviceUID) CFRelease(deviceUID);
+            if (deviceName)
+                CFRelease(deviceName);
+            if (deviceUID)
+                CFRelease(deviceUID);
         }
     }
 
     out += "=== Output Devices ===\n";
-    
+
     for (AudioDeviceID deviceID : devices) {
         // Check if device has output channels
         propertyAddress.mSelector = kAudioDevicePropertyStreamConfiguration;
         propertyAddress.mScope = kAudioDevicePropertyScopeOutput;
-        
+
         dataSize = 0;
         status = AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nullptr, &dataSize);
-        if (status != noErr) continue;
+        if (status != noErr)
+            continue;
 
         std::vector<UInt8> bufferListData(dataSize);
         AudioBufferList* bufferList = reinterpret_cast<AudioBufferList*>(bufferListData.data());
-        
+
         status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nullptr, &dataSize, bufferList);
-        if (status != noErr) continue;
+        if (status != noErr)
+            continue;
 
         UInt32 outputChannels = 0;
         for (UInt32 i = 0; i < bufferList->mNumberBuffers; ++i) {
@@ -458,8 +430,10 @@ QString AudioCapture::listDevicesString() {
             out += QString("  UID: %1\n").arg(uid);
             out += QString("  Channels: %1\n\n").arg(outputChannels);
 
-            if (deviceName) CFRelease(deviceName);
-            if (deviceUID) CFRelease(deviceUID);
+            if (deviceName)
+                CFRelease(deviceName);
+            if (deviceUID)
+                CFRelease(deviceUID);
         }
     }
 
@@ -477,26 +451,26 @@ QString AudioCapture::listDevicesString() {
 // -------- CoreAudio callback --------
 
 void AudioCapture::audioInputCallback(void* inUserData,
-                                       AudioQueueRef inAQ,
-                                       AudioQueueBuffer* inBuffer,
-                                       const void* inStartTime,
-                                       unsigned int inNumberPacketDescriptions,
-                                       const void* inPacketDescs) {
+                                      AudioQueueRef inAQ,
+                                      AudioQueueBuffer* inBuffer,
+                                      const void* inStartTime,
+                                      unsigned int inNumberPacketDescriptions,
+                                      const void* inPacketDescs) {
     (void)inStartTime;
     (void)inNumberPacketDescriptions;
     (void)inPacketDescs;
 
     auto* self = static_cast<AudioCapture*>(inUserData);
-    
+
     if (!self->running_.load(std::memory_order_relaxed)) {
         return;
     }
 
     AudioQueueBufferRef buffer = reinterpret_cast<AudioQueueBufferRef>(inBuffer);
-    
+
     const float* data = static_cast<const float*>(buffer->mAudioData);
-    const unsigned int frames = buffer->mAudioDataByteSize / (2 * sizeof(float));  // stereo
-    
+    const unsigned int frames = buffer->mAudioDataByteSize / (2 * sizeof(float)); // stereo
+
     self->processAudioBuffer(data, frames, 2, static_cast<float>(self->options_.sampleRate));
 
     // Re-enqueue the buffer

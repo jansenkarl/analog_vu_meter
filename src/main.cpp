@@ -27,8 +27,8 @@ int main(int argc, char** argv) {
 #else
     QCommandLineOption deviceNameOpt(QStringList() << "device-name", "PulseAudio device name (sink/source).", "name");
 #endif
-    QCommandLineOption deviceTypeOpt(QStringList() << "device-type",
-                                     "Device type: 0=system output, 1=microphone.", "type", "0");
+    QCommandLineOption deviceTypeOpt(
+        QStringList() << "device-type", "Device type: 0=system output, 1=microphone.", "type", "0");
     QCommandLineOption refOpt(QStringList() << "ref-dbfs", "Reference dBFS for 0 VU.", "db", "-18");
 
     parser.addOption(listDevicesOpt);

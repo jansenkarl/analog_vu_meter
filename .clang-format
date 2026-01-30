@@ -42,3 +42,7 @@ Cpp11BracedListStyle: true
 FixNamespaceComments: true
 InsertNewlineAtEOF: true
 
+# --- Prevent bin-packing (keeps one item per line) ---
+BinPackArguments: false
+BinPackParameters: false
+

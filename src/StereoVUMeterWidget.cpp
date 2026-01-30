@@ -19,6 +19,29 @@ static QPointF polarFromBottomPivot(const QPointF& pivot, float radius, float th
     return QPointF(pivot.x() + radius * sx, pivot.y() - radius * cy);
 }
 
+static float angleForVu(float vu, const QVector<QPair<float, float>>& table) {
+    // Clamp to table range
+    if (vu <= table.first().first)
+        return table.first().second;
+    if (vu >= table.last().first)
+        return table.last().second;
+
+    // Find segment
+    for (int i = 0; i < table.size() - 1; ++i) {
+        float v0 = table[i].first;
+        float a0 = table[i].second;
+        float v1 = table[i + 1].first;
+        float a1 = table[i + 1].second;
+
+        if (vu >= v0 && vu <= v1) {
+            float t = (vu - v0) / (v1 - v0);
+            return a0 + t * (a1 - a0);
+        }
+    }
+
+    return table.last().second; // fallback
+}
+
 StereoVUMeterWidget::StereoVUMeterWidget(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
@@ -43,65 +66,77 @@ void StereoVUMeterWidget::setStyle(VUMeterStyle style) {
 
 StereoVUMeterWidget::StyleParams StereoVUMeterWidget::getStyleParams() const {
     StyleParams params;
-    
+
     switch (style_) {
-        case VUMeterStyle::Original:
-        default:
-            params.labelSizeFactor = 0.050;
-            params.vuTextSizeFactor = 0.070;
-            params.vuTextRadius = 1.29;
-            params.singleVuText = false;
-            params.faceColorTop = QColor(250, 246, 226);
-            params.faceColorBottom = QColor(236, 230, 200);
-            params.labelColor = QColor(0, 0, 0, 220);
-            params.redZoneColor = QColor(170, 20, 20);
-            break;
-            
-        case VUMeterStyle::Sony:
-            params.labelSizeFactor = 0.065;      // ~67% larger labels
-            params.vuTextSizeFactor = 0.095;     // ~90% larger VU text
-            params.vuTextRadius = 0.85;          // Positioned in bottom third of face
-            params.singleVuText = true;          // Single centered VU
-            params.faceColorTop = QColor(235, 230, 200);
-            params.faceColorBottom = QColor(220, 215, 185);
-            params.labelColor = QColor(0, 0, 0, 230);
-            params.redZoneColor = QColor(140, 20, 20);
-            break;
-            
-        case VUMeterStyle::Vintage:
-            params.labelSizeFactor = 0.070;
-            params.vuTextSizeFactor = 0.080;
-            params.vuTextRadius = 1.29;
-            params.singleVuText = false;
-            params.faceColorTop = QColor(255, 248, 220);  // Warmer cream
-            params.faceColorBottom = QColor(240, 230, 195);
-            params.labelColor = QColor(60, 40, 20, 230);  // Brown-ish
-            params.redZoneColor = QColor(180, 50, 30);    // Orange-red
-            break;
-            
-        case VUMeterStyle::Modern:
-            params.labelSizeFactor = 0.060;
-            params.vuTextSizeFactor = 0.090;
-            params.vuTextRadius = 0.85;
-            params.singleVuText = true;
-            params.faceColorTop = QColor(245, 245, 248);  // Cool white
-            params.faceColorBottom = QColor(235, 235, 240);
-            params.labelColor = QColor(40, 40, 45, 230);  // Dark gray
-            params.redZoneColor = QColor(220, 50, 50);    // Bright red
-            break;
-            
-        case VUMeterStyle::Black:
-            params.labelSizeFactor = 0.060;
-            params.vuTextSizeFactor = 0.090;
-            params.vuTextRadius = 0.85;
-            params.singleVuText = true;
-            params.faceColorTop = QColor(20, 20, 22);     // Black (inverted from white)
-            params.faceColorBottom = QColor(30, 30, 35);  // Slightly lighter black
-            params.labelColor = QColor(235, 235, 240, 230);  // White (inverted from dark gray)
-            params.redZoneColor = QColor(220, 50, 50);    // Bright red (unchanged)
-            break;
+    case VUMeterStyle::Original:
+    default:
+        params.labelSizeFactor = 0.050;
+        params.vuTextSizeFactor = 0.070;
+        params.vuTextRadius = 1.29;
+        params.singleVuText = false;
+        params.faceColorTop = QColor(250, 246, 226);
+        params.faceColorBottom = QColor(236, 230, 200);
+        params.labelColor = QColor(0, 0, 0, 220);
+        params.redZoneColor = QColor(170, 20, 20);
+        break;
+
+    case VUMeterStyle::Sony:
+        params.labelSizeFactor = 0.065;
+        params.vuTextSizeFactor = 0.095;
+        params.vuTextRadius = 0.85;
+        params.singleVuText = true;
+        params.faceColorTop = QColor(235, 230, 200);
+        params.faceColorBottom = QColor(220, 215, 185);
+        params.labelColor = QColor(0, 0, 0, 230);
+        params.redZoneColor = QColor(140, 20, 20);
+        break;
+
+    case VUMeterStyle::Vintage:
+        params.labelSizeFactor = 0.070;
+        params.vuTextSizeFactor = 0.080;
+        params.vuTextRadius = 1.29;
+        params.singleVuText = false;
+        params.faceColorTop = QColor(255, 248, 220);
+        params.faceColorBottom = QColor(240, 230, 195);
+        params.labelColor = QColor(60, 40, 20, 230);
+        params.redZoneColor = QColor(180, 50, 30);
+        break;
+
+    case VUMeterStyle::Modern:
+        params.labelSizeFactor = 0.060;
+        params.vuTextSizeFactor = 0.090;
+        params.vuTextRadius = 0.85;
+        params.singleVuText = true;
+        params.faceColorTop = QColor(245, 245, 248);
+        params.faceColorBottom = QColor(235, 235, 240);
+        params.labelColor = QColor(40, 40, 45, 230);
+        params.redZoneColor = QColor(220, 50, 50);
+        break;
+
+    case VUMeterStyle::Black:
+        params.labelSizeFactor = 0.060;
+        params.vuTextSizeFactor = 0.090;
+        params.vuTextRadius = 0.85;
+        params.singleVuText = true;
+        params.faceColorTop = QColor(20, 20, 22);
+        params.faceColorBottom = QColor(30, 30, 35);
+        params.labelColor = QColor(235, 235, 240, 230);
+        params.redZoneColor = QColor(220, 50, 50);
+        break;
+
+    case VUMeterStyle::Skin:
+        // Skin mode ignores all vector-drawing parameters.
+        params.labelSizeFactor = 0.0;
+        params.vuTextSizeFactor = 0.0;
+        params.vuTextRadius = 0.0;
+        params.singleVuText = true;
+        params.faceColorTop = Qt::black;
+        params.faceColorBottom = Qt::black;
+        params.labelColor = Qt::black;
+        params.redZoneColor = Qt::red;
+        break;
     }
-    
+
     return params;
 }
 
@@ -112,50 +147,65 @@ void StereoVUMeterWidget::setLevels(float leftVuDb, float rightVuDb) {
 }
 
 void StereoVUMeterWidget::paintEvent(QPaintEvent*) {
-    // Set up painter
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
-    p.fillRect(rect(), Qt::black);
 
-    // Full widget area
     const QRectF r = rect();
 
-    // Load meter face image once (static keeps it cached) and get its aspect ratio
-    const qreal aspect = qreal(skin_.single.face.width()) / qreal(skin_.single.face.height());
-
-    // Outer padding around the meters
+    // --- Common layout calculations (shared by all styles) ---
     const qreal outerPad = std::max<qreal>(14.0, r.width() * 0.02);
     const QRectF inner = r.adjusted(outerPad, outerPad, -outerPad, -outerPad);
 
-    // Horizontal gap between left and right meters
-    //const qreal gap = std::max<qreal>(16.0, inner.width() * 0.03);
-    const qreal gap = skin_.isStereo ? 0.0 : std::max<qreal>(16.0, inner.width() * 0.03);
+    // Default aspect ratio for vector-drawn styles
+    qreal aspect = 1.75;
 
-    // Compute meter size based on available width
+    // Skin mode uses the image's aspect ratio
+    if (style_ == VUMeterStyle::Skin) {
+        aspect = qreal(skin_.single.face.width()) / qreal(skin_.single.face.height());
+    }
+
+    const qreal gap =
+        (style_ == VUMeterStyle::Skin && skin_.isStereo) ? 0.0 : std::max<qreal>(16.0, inner.width() * 0.03);
+
     qreal meterW = (inner.width() - gap) / 2.0;
     qreal meterH = meterW / aspect;
 
-    // Clamp by height if needed
     if (meterH > inner.height()) {
         meterH = inner.height();
         meterW = meterH * aspect;
     }
 
-    // Vertical centering
     const qreal y = inner.center().y() - meterH / 2.0;
 
-    // Final rectangles for left and right meter faces
     const QRectF leftRect(inner.left(), y, meterW, meterH);
     const QRectF rightRect(leftRect.right() + gap, y, meterW, meterH);
 
-    // Draw the meter face images
-    p.drawPixmap(leftRect, skin_.left.face, skin_.left.face.rect());
-    p.drawPixmap(rightRect, skin_.right.face, skin_.right.face.rect());
+    // --- Mode switch ---
+    if (style_ != VUMeterStyle::Skin) {
+        // All vector-drawn styles (Original, Sony, Vintage, Modern, Black)
 
-    // Draw needles on top
-    drawMeterImageOnly(p, leftRect, left_, skin_.left);
-    drawMeterImageOnly(p, rightRect, right_, skin_.right);
+        // Background gradient
+        QLinearGradient bg(r.topLeft(), r.bottomRight());
+        bg.setColorAt(0.0, QColor(20, 20, 22));
+        bg.setColorAt(1.0, QColor(6, 6, 7));
+        p.fillRect(r, bg);
+
+        // Vector-drawn meters
+        drawMeter(p, leftRect, left_);
+        drawMeter(p, rightRect, right_);
+    } else {
+        // --- Skin mode ---
+        p.fillRect(r, Qt::black);
+
+        // Draw face images
+        p.drawPixmap(leftRect, skin_.left.face, skin_.left.face.rect());
+        p.drawPixmap(rightRect, skin_.right.face, skin_.right.face.rect());
+
+        // Draw needles + caps
+        drawMeterImageOnly(p, leftRect, left_, skin_.left);
+        drawMeterImageOnly(p, rightRect, right_, skin_.right);
+    }
 }
 
 void StereoVUMeterWidget::drawMeterImageOnly(QPainter& p, const QRectF& rect, float vuDb, VUMeterSkin& skin) {
@@ -168,19 +218,21 @@ void StereoVUMeterWidget::drawMeterImageOnly(QPainter& p, const QRectF& rect, fl
     const QPointF pivot(rect.left() + skin.calib.pivotX * scaleX, rect.top() + skin.calib.pivotY * scaleY);
 
     // --- Compute rotation angle ---
-    float angleDeg = 0.0f;
+    const float angleDeg = angleForVu(vuDb, calibrationTable_);
 
-    if (vuDb <= skin.calib.minLevel)
-        angleDeg = skin.calib.minAngle;
-    else if (vuDb >= skin.calib.maxLevel)
-        angleDeg = skin.calib.maxAngle;
-    else if (vuDb < skin.calib.zeroLevel) {
-        float t = (vuDb - skin.calib.minLevel) / (skin.calib.zeroLevel - skin.calib.minLevel);
-        angleDeg = skin.calib.minAngle + t * (skin.calib.zeroAngle - skin.calib.minAngle);
-    } else {
-        float t = (vuDb - skin.calib.zeroLevel) / (skin.calib.maxLevel - skin.calib.zeroLevel);
-        angleDeg = skin.calib.zeroAngle + t * (skin.calib.maxAngle - skin.calib.zeroAngle);
-    }
+    // float angleDeg = 0.0f;
+
+    // if (vuDb <= skin.calib.minLevel)
+    //     angleDeg = skin.calib.minAngle;
+    // else if (vuDb >= skin.calib.maxLevel)
+    //     angleDeg = skin.calib.maxAngle;
+    // else if (vuDb < skin.calib.zeroLevel) {
+    //     float t = (vuDb - skin.calib.minLevel) / (skin.calib.zeroLevel - skin.calib.minLevel);
+    //     angleDeg = skin.calib.minAngle + t * (skin.calib.zeroAngle - skin.calib.minAngle);
+    // } else {
+    //     float t = (vuDb - skin.calib.zeroLevel) / (skin.calib.maxLevel - skin.calib.zeroLevel);
+    //     angleDeg = skin.calib.zeroAngle + t * (skin.calib.maxAngle - skin.calib.zeroAngle);
+    // }
 
     // --- Rotate ONLY the needle ---
     {
@@ -238,33 +290,7 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
     const QPointF pivot(face.center().x(), face.bottom() + face.height() * 0.35);
     const qreal radius = std::min(face.width(), face.height()) * 1.00;
 
-    auto angleForVu = [](float vu) {
-        static const QVector<QPair<float, float>> table = {{-20, -46}, {-10, -34}, {-7, -25}, {-5, -16},
-                                                           {-3, -5},   {-2, 2},    {-1, 9},   {0, 18},
-                                                           {1, 27},    {2, 37},    {3, 48}};
-
-        // clamp
-        if (vu < -20)
-            return -48.0f;
-        if (vu >= 3)
-            return 48.0f;
-
-        // find segment
-        for (int i = 0; i < table.size() - 1; ++i) {
-            float v0 = table[i].first;
-            float a0 = table[i].second;
-            float v1 = table[i + 1].first;
-            float a1 = table[i + 1].second;
-
-            if (vu >= v0 && vu <= v1) {
-                float t = (vu - v0) / (v1 - v0);
-                return a0 + t * (a1 - a0);
-            }
-        }
-
-        return 0.0f; // fallback
-    };
-    const float theta = angleForVu(vuDb);
+    const float theta = angleForVu(vuDb, calibrationTable_);
 
     // --- Draw needle with clipping to face area ---
     // This makes the needle visible only within the face, hiding the pivot area
@@ -325,8 +351,8 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
 
     // Scale angles
     const float aMin = -48.0f;
-    const float a0 = angleForVu(0.0f); // +18°
-    const float a3 = angleForVu(3.0f); // +48°
+    const float a0 = angleForVu(0.0f, calibrationTable_); // +18°
+    const float a3 = angleForVu(3.0f, calibrationTable_); // +47°
 
     auto arcStart = [](float logicalEndDeg) { return int((90.0f - logicalEndDeg) * 16.0f); };
     auto arcSpan = [](float logicalStartDeg, float logicalEndDeg) {
@@ -347,7 +373,7 @@ void StereoVUMeterWidget::drawMeter(QPainter& p, const QRectF& rect, float vuDb)
         bool major = (v == -20.0f || v == -10.0f || v == -7.0f || v == -5.0f || v == -3.0f || v == -2.0f ||
                       v == -1.0f || v == 0.0f || v == 1.0f || v == 2.0f || v == 3.0f);
 
-        const float a = angleForVu(v);
+        const float a = angleForVu(v, calibrationTable_);
 
         const QPointF p1 = polarFromBottomPivot(pivot, tickR1, a);
         const QPointF p2 = polarFromBottomPivot(pivot, major ? tickR2Major : tickR2Minor, a);
@@ -481,4 +507,18 @@ void StereoVUMeterWidget::loadDefaultSkin() {
     // Duplicate into stereo (your rule)
     skin_.left = s;
     skin_.right = s;
+
+    calibrationTable_ = {{-20, -47},
+                         {-10, -34},
+                         {-7, -25},
+                         {-6, -21},
+                         {-5, -16},
+                         {-4, -11},
+                         {-3, -5},
+                         {-2, 2},
+                         {-1, 9},
+                         {0, 18},
+                         {1, 27},
+                         {2, 38},
+                         {3, 47}};
 }
