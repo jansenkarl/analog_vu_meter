@@ -176,14 +176,8 @@ if(APPLE)
             COMMAND "${MACDEPLOYQT_EXECUTABLE}"
                 "$<TARGET_BUNDLE_DIR:analog_vu_meter>"
                 -always-overwrite
-            COMMENT "Running macdeployqt to bundle Qt frameworks..."
-        )
-        
-        # Re-sign the app bundle after macdeployqt modifies it
-        # This fixes "Code Signature Invalid" crashes on macOS
-        add_custom_command(TARGET analog_vu_meter POST_BUILD
             COMMAND codesign --force --deep --sign - "$<TARGET_BUNDLE_DIR:analog_vu_meter>"
-            COMMENT "Re-signing app bundle after deployment..."
+            COMMENT "Running macdeployqt and re-signing app bundle..."
         )
         message(STATUS "macdeployqt found: ${MACDEPLOYQT_EXECUTABLE}")
     else()
